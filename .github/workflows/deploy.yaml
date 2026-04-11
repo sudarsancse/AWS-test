@@ -1,0 +1,63 @@
+name: Node.js EC2 Deploy
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    strategy:
+      matrix:
+        node-version: [24.x]
+
+    steps:
+      # ── STEP 1: Checkout Code ──────────────────────────────
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ── STEP 2: Setup Node.js ──────────────────────────────
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # ── STEP 3: Create .env for API ───────────────────────
+      - name: Create .env for API Service
+        run: |
+          cat > backend/api/.env <<EOF
+          PORT=${{ secrets.API_ENV }}
+          NODE_ENV=production
+          EOF
+
+      # ── STEP 4: Create .env for AUTH ───────────────────────
+      - name: Create .env for auth Service
+        run: |
+          cat > backend/auth/.env <<EOF
+          PORT=${{ secrets.AUTH_ENV }}
+          NODE_ENV=production
+          EOF
+
+      # ── STEP 5: Install Dependencies - API ────────────────
+      - name: Install Dependencies - API
+        working-directory: backend/api
+        run: npm ci
+
+      # ── STEP 6: Install Dependencies - Auth ───────────────
+      - name: Install Dependencies - Auth
+        working-directory: backend/auth
+        run: npm ci
+
+      # ── STEP 7: Restart API with PM2 ──────────────────────
+      - name: Restart API Service
+        working-directory: backend/api
+        run: |
+          pm2 restart auth
+
+      # ── STEP 8: Restart Auth with PM2 ─────────────────────
+      - name: Restart Auth Service
+        working-directory: backend/auth
+        run: |
+          pm2 restart auth
+      # ── STEP 8: Restart nginx ─────────────────────
+      - name: restart nginx
+        run: sudo systemctl restart nginx
